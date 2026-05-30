@@ -1,0 +1,10 @@
+{
+  "name": "bit",
+  "type": "module",
+  "scripts": {
+    "compile": "node scripts/compile-contract.mjs"
+  },
+  "dependencies": {
+    "solc": "^0.8.20"
+  }
+}

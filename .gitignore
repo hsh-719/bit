@@ -1,0 +1,7 @@
+spec.md
+HANDOVER.md
+# Go 빌드 산출물
+bit
+*.exe
+vendor/
+node_modules/
