@@ -1,7 +1,17 @@
-spec.md
-HANDOVER.md
-# Go 빌드 산출물
+# 빌드 바이너리
 bit
-*.exe
-vendor/
-node_modules/
+
+# IPFS 설치 파일
+kubo/
+kubo_v0.27.0_linux-amd64.tar.gz
+
+# 테스트 임시 파일/디렉토리
+test/
+*_test_main.go
+
+# 환경변수 파일 (개인키 등 민감 정보)
+.env
+.bit/
+
+# Go 캐시
+*.out

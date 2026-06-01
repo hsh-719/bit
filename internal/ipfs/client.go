@@ -1,22 +1,73 @@
 package ipfs
 
-// Client wraps IPFS HTTP API calls.
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"mime/multipart"
+	"net/http"
+)
+
+// Client는 IPFS HTTP API와 통신하는 클라이언트다.
+// apiURL: IPFS 노드 주소 (기본값: "http://localhost:5001")
 type Client struct {
-	apiURL string // e.g. "http://localhost:5001"
+	apiURL string
 }
 
+// NewClient는 IPFS 클라이언트를 생성한다.
 func NewClient(apiURL string) *Client {
 	return &Client{apiURL: apiURL}
 }
 
-// Upload uploads data to IPFS and returns the CID string.
+// Upload는 데이터를 IPFS에 업로드하고 CID 문자열을 반환한다.
+// multipart/form-data 형식으로 POST /api/v0/add를 호출한다.
+// 반환된 CID는 이후 Download 호출이나 온체인 기록에 사용된다.
 func (c *Client) Upload(data []byte) (string, error) {
-	// TODO: multipart POST to /api/v0/add
-	return "", nil
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	part, err := writer.CreateFormFile("file", "data")
+	if err != nil {
+		return "", err
+	}
+	if _, err := part.Write(data); err != nil {
+		return "", err
+	}
+	writer.Close()
+
+	resp, err := http.Post(
+		c.apiURL+"/api/v0/add",
+		writer.FormDataContentType(),
+		body,
+	)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	// 응답 JSON에서 CID(Hash 필드) 추출
+	var result struct {
+		Hash string `json:"Hash"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+	return result.Hash, nil
 }
 
-// Download fetches data from IPFS by CID.
+// Download는 CID로 IPFS에서 데이터를 다운로드한다.
+// POST /api/v0/cat?arg=<cid>를 호출해 원본 바이트를 반환한다.
 func (c *Client) Download(cid string) ([]byte, error) {
-	// TODO: POST to /api/v0/cat?arg=<cid>
-	return nil, nil
+	resp, err := http.Post(
+		fmt.Sprintf("%s/api/v0/cat?arg=%s", c.apiURL, cid),
+		"",
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	return io.ReadAll(resp.Body)
 }
