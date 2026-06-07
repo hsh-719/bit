@@ -15,3 +15,10 @@ test/
 
 # Go 캐시
 *.out
+
+node_modules/
+
+spec.md
+HANDOVER.md
+
+cache/
