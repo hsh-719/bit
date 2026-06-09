@@ -2,7 +2,7 @@
 
 IPFS와 블록체인 위에서 동작하는 탈중앙화 버전 관리 시스템입니다.
 
-코드는 IPFS에, 브랜치 상태는 스마트 컨트랙트(BitRegistry)에 저장됩니다.
+커밋 diff와 manifest는 IPFS에, 브랜치/커밋 상태는 스마트 컨트랙트(BitRegistry)에 저장됩니다.
 
 ---
 
@@ -58,11 +58,15 @@ bit remote add origin bit://local/0xYourContractAddress/1
 
 ### 3. push
 
-현재 브랜치의 전체 코드를 IPFS에 올리고, 브랜치 상태를 체인에 기록합니다.
+현재 브랜치에서 아직 체인에 기록되지 않은 커밋들을 커밋 단위 diff로 IPFS에 올리고,
+브랜치 상태와 커밋 메타데이터를 체인에 기록합니다.
 
 ```bash
 bit push origin
 ```
+
+> 현재 CLI는 diff-only 재현성을 위해 linear history 커밋을 대상으로 동작합니다.
+> merge commit push는 아직 지원하지 않습니다.
 
 ### 4. pull
 
@@ -99,16 +103,24 @@ bit pull origin main
 
 ```
 push:
-  로컬 .git → git bundle → IPFS (bundleCID)
-                         → manifest JSON → IPFS (manifestCID)
-                                         → 스마트 컨트랙트 (브랜치 헤드 갱신)
+  로컬 .git → 누락 커밋 목록 계산
+            → 커밋별 binary diff → IPFS (diffCID)
+            → 커밋 manifest JSON → IPFS (manifestCID)
+            → 스마트 컨트랙트 (branch head commit, tree, parents, manifestCID, diffCID 기록)
 
 pull:
-  스마트 컨트랙트 (manifestCID 조회)
-    → IPFS manifest 다운로드 (bundleCID 추출)
-    → IPFS bundle 다운로드
-    → 로컬 .git 적용
+  스마트 컨트랙트 (branch history 조회)
+    → 누락 커밋별 manifest 다운로드
+    → 누락 커밋별 diff 다운로드
+    → manifest의 author/committer/message/tree/parent 정보로 원본 커밋 재구성
 ```
+
+### IPFS/체인 저장 모델
+
+- IPFS에는 전체 bundle 대신 `git diff --binary --full-index` 형식의 커밋별 diff와 manifest가 저장됩니다.
+- manifest에는 원본 커밋 해시, tree 해시, 부모 커밋, author/committer, 커밋 메시지, diff CID가 포함됩니다.
+- 체인에는 브랜치별 최신 commit, branch history, commit tree hash, parent hash, manifest CID, diff CID가 저장됩니다.
+- Git SHA-1 커밋/트리 해시는 `bytes20`으로 저장해 기존 동적 문자열 저장보다 온체인 저장량을 줄입니다.
 
 ---
 

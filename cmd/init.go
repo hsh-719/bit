@@ -33,6 +33,9 @@ var initCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("저장소 생성 실패: %w", err)
 		}
+		if repoID == nil {
+			return fmt.Errorf("저장소 생성 실패: repoId를 확인할 수 없습니다")
+		}
 		fmt.Printf("체인 저장소 생성 완료 (repoId: %s)\n", repoID.String())
 
 		// 3. .bit/config.json 생성

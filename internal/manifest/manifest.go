@@ -2,11 +2,36 @@ package manifest
 
 import "encoding/json"
 
-// Manifest is uploaded to IPFS and its CID is recorded on-chain as the branch head.
+const (
+	VersionCommitDiff = 1
+	StorageGitDiff    = "git-diff"
+	DiffBinaryPatch   = "git diff --binary --full-index"
+)
+
+// Identity captures the metadata needed to rebuild the original Git commit.
+type Identity struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
+	Date  string `json:"date"`
+}
+
+// Manifest is uploaded to IPFS and its CID is recorded on-chain as the branch
+// head. Version 1 stores exactly one commit diff per manifest.
 type Manifest struct {
-	BundleCID      string `json:"bundleCid"`      // IPFS CID of the Git object pack
-	GitCommit      string `json:"gitCommit"`      // Git commit hash
-	PreviousCommit string `json:"previousCommit"` // first-parent commit hash
+	Version       int      `json:"version"`
+	Storage       string   `json:"storage"`
+	DiffAlgorithm string   `json:"diffAlgorithm"`
+	Branch        string   `json:"branch"`
+	DiffCID       string   `json:"diffCid"`
+	GitCommit     string   `json:"gitCommit"`
+	TreeHash      string   `json:"treeHash"`
+	ParentCommits []string `json:"parentCommits"`
+	Author        Identity `json:"author"`
+	Committer     Identity `json:"committer"`
+	Message       string   `json:"message"`
+
+	// BundleCID is kept for backwards-compatible decoding of older manifests.
+	BundleCID string `json:"bundleCid,omitempty"`
 }
 
 func Encode(m *Manifest) ([]byte, error) {
