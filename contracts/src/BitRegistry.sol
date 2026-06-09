@@ -11,8 +11,8 @@ contract BitRegistry {
 
     struct CommitRecord {
         bytes20 treeHash;
-        bytes manifestCID;
-        bytes diffCID;
+        bytes32 manifestDigest;
+        bytes32 diffDigest;
         address updater;
         uint256 timestamp;
         bytes20[] parents;
@@ -23,7 +23,6 @@ contract BitRegistry {
         address owner;
         bytes metadataCID;
         mapping(address => Role) roles;
-        mapping(bytes32 => bytes) branchHeads;
         mapping(bytes32 => bytes20) branchCommits;
         mapping(bytes32 => bytes20[]) branchHistory;
         mapping(bytes20 => CommitRecord) commits;
@@ -55,8 +54,8 @@ contract BitRegistry {
         bytes20 indexed commitHash,
         bytes20 treeHash,
         bytes20[] parents,
-        bytes manifestCID,
-        bytes diffCID,
+        bytes32 manifestDigest,
+        bytes32 diffDigest,
         address updater
     );
     event BranchUpdated(
@@ -107,7 +106,11 @@ contract BitRegistry {
     }
 
     function getBranchHead(uint256 repoId, bytes32 branch) external view repoExists(repoId) returns (bytes memory) {
-        return repos[repoId].branchHeads[branch];
+        bytes20 commitHash = repos[repoId].branchCommits[branch];
+        if (commitHash == bytes20(0)) {
+            return bytes("");
+        }
+        return abi.encodePacked(repos[repoId].commits[commitHash].manifestDigest);
     }
 
     function getBranchCommit(uint256 repoId, bytes32 branch) external view repoExists(repoId) returns (bytes20) {
@@ -127,15 +130,48 @@ contract BitRegistry {
         return repos[repoId].branchHistory[branch][index];
     }
 
+    function getBranchCommitsWithMetadata(uint256 repoId, bytes32 branch, uint256 start, uint256 limit)
+        external
+        view
+        repoExists(repoId)
+        returns (
+            bytes20[] memory commitHashes,
+            bytes20[] memory treeHashes,
+            bytes32[] memory manifestDigests,
+            bytes32[] memory diffDigests
+        )
+    {
+        bytes20[] storage history = repos[repoId].branchHistory[branch];
+        if (start >= history.length || limit == 0) {
+            return (new bytes20[](0), new bytes20[](0), new bytes32[](0), new bytes32[](0));
+        }
+        uint256 count = history.length - start;
+        if (count > limit) {
+            count = limit;
+        }
+        commitHashes = new bytes20[](count);
+        treeHashes = new bytes20[](count);
+        manifestDigests = new bytes32[](count);
+        diffDigests = new bytes32[](count);
+        for (uint256 i = 0; i < count; i++) {
+            bytes20 commitHash = history[start + i];
+            CommitRecord storage item = repos[repoId].commits[commitHash];
+            commitHashes[i] = commitHash;
+            treeHashes[i] = item.treeHash;
+            manifestDigests[i] = item.manifestDigest;
+            diffDigests[i] = item.diffDigest;
+        }
+    }
+
     function getCommit(uint256 repoId, bytes20 commitHash)
         external
         view
         repoExists(repoId)
-        returns (bytes20 treeHash, bytes memory manifestCID, bytes memory diffCID, address updater, uint256 timestamp)
+        returns (bytes20 treeHash, bytes32 manifestDigest, bytes32 diffDigest, address updater, uint256 timestamp)
     {
         CommitRecord storage item = repos[repoId].commits[commitHash];
         if (!item.exists) revert CommitNotFound();
-        return (item.treeHash, item.manifestCID, item.diffCID, item.updater, item.timestamp);
+        return (item.treeHash, item.manifestDigest, item.diffDigest, item.updater, item.timestamp);
     }
 
     function getCommitParentCount(uint256 repoId, bytes20 commitHash)
@@ -179,10 +215,10 @@ contract BitRegistry {
         bytes20 previous;
         if (item.parents.length > 0) {
             previous = item.parents[0];
-            oldHead = repo.commits[previous].manifestCID;
+            oldHead = abi.encodePacked(repo.commits[previous].manifestDigest);
             previousCommit = abi.encodePacked(previous);
         }
-        return (oldHead, item.manifestCID, abi.encodePacked(commitHash), previousCommit, item.updater, item.timestamp);
+        return (oldHead, abi.encodePacked(item.manifestDigest), abi.encodePacked(commitHash), previousCommit, item.updater, item.timestamp);
     }
 
     function recordCommit(
@@ -192,8 +228,8 @@ contract BitRegistry {
         bytes20 commitHash,
         bytes20 treeHash,
         bytes20[] calldata parents,
-        bytes calldata manifestCID,
-        bytes calldata diffCID
+        bytes32 manifestDigest,
+        bytes32 diffDigest
     ) external repoExists(repoId) onlyMaintainer(repoId) {
         if (commitHash == bytes20(0)) revert ZeroCommit();
 
@@ -210,8 +246,8 @@ contract BitRegistry {
             if (item.treeHash != treeHash) revert CommitMetadataMismatch();
         } else {
             item.treeHash = treeHash;
-            item.manifestCID = manifestCID;
-            item.diffCID = diffCID;
+            item.manifestDigest = manifestDigest;
+            item.diffDigest = diffDigest;
             item.updater = msg.sender;
             item.timestamp = block.timestamp;
             item.exists = true;
@@ -220,18 +256,18 @@ contract BitRegistry {
             }
         }
 
-        bytes memory oldHead = repo.branchHeads[branch];
+        bytes20 oldCommit = repo.branchCommits[branch];
+        bytes memory oldHead = oldCommit == bytes20(0) ? bytes("") : abi.encodePacked(repo.commits[oldCommit].manifestDigest);
         bytes memory previousCommit = parents.length == 0 ? bytes("") : abi.encodePacked(parents[0]);
         repo.branchCommits[branch] = commitHash;
-        repo.branchHeads[branch] = manifestCID;
         repo.branchHistory[branch].push(commitHash);
 
-        emit CommitRecorded(repoId, branch, commitHash, treeHash, parents, manifestCID, diffCID, msg.sender);
+        emit CommitRecorded(repoId, branch, commitHash, treeHash, parents, manifestDigest, diffDigest, msg.sender);
         emit BranchUpdated(
             repoId,
             branch,
             oldHead,
-            manifestCID,
+            abi.encodePacked(manifestDigest),
             abi.encodePacked(commitHash),
             previousCommit,
             msg.sender

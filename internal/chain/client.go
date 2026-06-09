@@ -35,11 +35,18 @@ type artifactJSON struct {
 }
 
 type CommitRecord struct {
-	TreeHash    [20]byte
-	ManifestCID string
-	DiffCID     string
-	Updater     common.Address
-	Timestamp   *big.Int
+	TreeHash       [20]byte
+	ManifestDigest [32]byte
+	DiffDigest     [32]byte
+	Updater        common.Address
+	Timestamp      *big.Int
+}
+
+type BranchCommitRecord struct {
+	CommitHash     [20]byte
+	TreeHash       [20]byte
+	ManifestDigest [32]byte
+	DiffDigest     [32]byte
 }
 
 // Client는 BitRegistry 스마트 컨트랙트와 통신하는 클라이언트다.
@@ -182,17 +189,38 @@ func (c *Client) GetBranchCommitAt(repoID *big.Int, branch string, index *big.In
 	return *abi.ConvertType(out[0], new([20]byte)).(*[20]byte), nil
 }
 
+func (c *Client) GetBranchCommitsWithMetadata(repoID *big.Int, branch string, start, limit *big.Int) ([]BranchCommitRecord, error) {
+	out, err := c.call("getBranchCommitsWithMetadata", repoID, branchNameToBytes32(branch), start, limit)
+	if err != nil {
+		return nil, err
+	}
+	commitHashes := *abi.ConvertType(out[0], new([][20]byte)).(*[][20]byte)
+	treeHashes := *abi.ConvertType(out[1], new([][20]byte)).(*[][20]byte)
+	manifestDigests := *abi.ConvertType(out[2], new([][32]byte)).(*[][32]byte)
+	diffDigests := *abi.ConvertType(out[3], new([][32]byte)).(*[][32]byte)
+	records := make([]BranchCommitRecord, len(commitHashes))
+	for i := range commitHashes {
+		records[i] = BranchCommitRecord{
+			CommitHash:     commitHashes[i],
+			TreeHash:       treeHashes[i],
+			ManifestDigest: manifestDigests[i],
+			DiffDigest:     diffDigests[i],
+		}
+	}
+	return records, nil
+}
+
 func (c *Client) GetCommit(repoID *big.Int, commitHash [20]byte) (*CommitRecord, error) {
 	out, err := c.call("getCommit", repoID, commitHash)
 	if err != nil {
 		return nil, err
 	}
 	return &CommitRecord{
-		TreeHash:    *abi.ConvertType(out[0], new([20]byte)).(*[20]byte),
-		ManifestCID: string(*abi.ConvertType(out[1], new([]byte)).(*[]byte)),
-		DiffCID:     string(*abi.ConvertType(out[2], new([]byte)).(*[]byte)),
-		Updater:     *abi.ConvertType(out[3], new(common.Address)).(*common.Address),
-		Timestamp:   *abi.ConvertType(out[4], new(*big.Int)).(**big.Int),
+		TreeHash:       *abi.ConvertType(out[0], new([20]byte)).(*[20]byte),
+		ManifestDigest: *abi.ConvertType(out[1], new([32]byte)).(*[32]byte),
+		DiffDigest:     *abi.ConvertType(out[2], new([32]byte)).(*[32]byte),
+		Updater:        *abi.ConvertType(out[3], new(common.Address)).(*common.Address),
+		Timestamp:      *abi.ConvertType(out[4], new(*big.Int)).(**big.Int),
 	}, nil
 }
 
@@ -203,8 +231,8 @@ func (c *Client) RecordCommit(
 	commitHash [20]byte,
 	treeHash [20]byte,
 	parentHashes [][20]byte,
-	manifestCID string,
-	diffCID string,
+	manifestDigest [32]byte,
+	diffDigest [32]byte,
 ) error {
 	tx, err := c.contract.Transact(
 		c.auth,
@@ -215,8 +243,8 @@ func (c *Client) RecordCommit(
 		commitHash,
 		treeHash,
 		parentHashes,
-		[]byte(manifestCID),
-		[]byte(diffCID),
+		manifestDigest,
+		diffDigest,
 	)
 	if err != nil {
 		return err

@@ -119,8 +119,11 @@ pull:
 
 - IPFS에는 전체 bundle 대신 `git diff --binary --full-index` 형식의 커밋별 diff와 manifest가 저장됩니다.
 - manifest에는 원본 커밋 해시, tree 해시, 부모 커밋, author/committer, 커밋 메시지, diff CID가 포함됩니다.
-- 체인에는 브랜치별 최신 commit, branch history, commit tree hash, parent hash, manifest CID, diff CID가 저장됩니다.
+- 체인에는 브랜치별 최신 commit, branch history, commit tree hash, parent hash, manifest CID digest, diff CID digest가 저장됩니다.
 - Git SHA-1 커밋/트리 해시는 `bytes20`으로 저장해 기존 동적 문자열 저장보다 온체인 저장량을 줄입니다.
+- IPFS CID는 온체인에서 ASCII 문자열이 아니라 CIDv0 sha2-256 digest인 `bytes32`로 저장됩니다.
+- 브랜치 head는 최신 commit만 저장하고, manifest CID digest는 commit record에만 저장해 중복 저장을 피합니다.
+- pull은 브랜치 히스토리와 commit metadata를 페이지 단위로 조회해 커밋당 RPC 호출 수를 줄입니다.
 
 ---
 

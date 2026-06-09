@@ -5,6 +5,7 @@ import (
 	"math/big"
 
 	"github.com/hsh-719/bit/internal/chain"
+	compactcid "github.com/hsh-719/bit/internal/cid"
 	"github.com/hsh-719/bit/internal/config"
 	"github.com/hsh-719/bit/internal/git"
 	"github.com/hsh-719/bit/internal/ipfs"
@@ -43,20 +44,20 @@ var pullCmd = &cobra.Command{
 		if historyLen.Sign() == 0 {
 			return fmt.Errorf("브랜치 '%s' 가 아직 push된 적 없습니다", branch)
 		}
+		records, err := loadBranchRecords(chainClient, repoID, branch, historyLen.Int64())
+		if err != nil {
+			return err
+		}
 
-		start := int64(0)
+		start := 0
 		if git.HasHead(".") {
 			localHead, err := git.CurrentHead(".")
 			if err != nil {
 				return fmt.Errorf("로컬 HEAD 조회 실패: %w", err)
 			}
 			found := false
-			for i := int64(0); i < historyLen.Int64(); i++ {
-				commitHash, err := chainClient.GetBranchCommitAt(repoID, branch, big.NewInt(i))
-				if err != nil {
-					return fmt.Errorf("브랜치 히스토리 항목 조회 실패 (%d): %w", i, err)
-				}
-				if chain.Bytes20ToGitHash(commitHash) == localHead {
+			for i, record := range records {
+				if chain.Bytes20ToGitHash(record.CommitHash) == localHead {
 					start = i + 1
 					found = true
 					break
@@ -66,37 +67,31 @@ var pullCmd = &cobra.Command{
 				return fmt.Errorf("로컬 HEAD %s 는 원격 브랜치 '%s' 히스토리에 없습니다", localHead[:8], branch)
 			}
 		}
-		if start >= historyLen.Int64() {
+		if start >= len(records) {
 			fmt.Printf("%s is already up to date\n", branch)
 			return nil
 		}
 
-		fmt.Printf("브랜치: %s, 적용 커밋: %d개\n", branch, historyLen.Int64()-start)
+		fmt.Printf("브랜치: %s, 적용 커밋: %d개\n", branch, len(records)-start)
 		ipfsClient := ipfs.NewClient(cfg.IPFSURL)
-		for i := start; i < historyLen.Int64(); i++ {
-			commitHash, err := chainClient.GetBranchCommitAt(repoID, branch, big.NewInt(i))
-			if err != nil {
-				return fmt.Errorf("브랜치 히스토리 항목 조회 실패 (%d): %w", i, err)
-			}
-			record, err := chainClient.GetCommit(repoID, commitHash)
-			if err != nil {
-				return fmt.Errorf("체인 커밋 조회 실패 (%s): %w", chain.Bytes20ToGitHash(commitHash), err)
-			}
+		for _, record := range records[start:] {
+			manifestCID := compactcid.CIDV0FromDigest(record.ManifestDigest)
+			diffCID := compactcid.CIDV0FromDigest(record.DiffDigest)
 
-			manifestData, err := ipfsClient.Download(record.ManifestCID)
+			manifestData, err := ipfsClient.Download(manifestCID)
 			if err != nil {
-				return fmt.Errorf("manifest 다운로드 실패 (%s): %w", record.ManifestCID, err)
+				return fmt.Errorf("manifest 다운로드 실패 (%s): %w", manifestCID, err)
 			}
 			m, err := manifest.Decode(manifestData)
 			if err != nil {
-				return fmt.Errorf("manifest 파싱 실패 (%s): %w", record.ManifestCID, err)
+				return fmt.Errorf("manifest 파싱 실패 (%s): %w", manifestCID, err)
 			}
 
-			expectedCommit := chain.Bytes20ToGitHash(commitHash)
+			expectedCommit := chain.Bytes20ToGitHash(record.CommitHash)
 			if m.GitCommit != expectedCommit {
 				return fmt.Errorf("manifest commit mismatch: got %s, want %s", m.GitCommit, expectedCommit)
 			}
-			if m.DiffCID != record.DiffCID {
+			if m.DiffCID != diffCID {
 				return fmt.Errorf("manifest diff CID mismatch for %s", expectedCommit)
 			}
 			if m.TreeHash != chain.Bytes20ToGitHash(record.TreeHash) {
@@ -116,4 +111,21 @@ var pullCmd = &cobra.Command{
 		fmt.Printf("pull 완료: %s\n", branch)
 		return nil
 	},
+}
+
+func loadBranchRecords(chainClient *chain.Client, repoID *big.Int, branch string, total int64) ([]chain.BranchCommitRecord, error) {
+	const pageSize int64 = 100
+	records := make([]chain.BranchCommitRecord, 0, total)
+	for start := int64(0); start < total; start += pageSize {
+		limit := pageSize
+		if remaining := total - start; remaining < limit {
+			limit = remaining
+		}
+		page, err := chainClient.GetBranchCommitsWithMetadata(repoID, branch, big.NewInt(start), big.NewInt(limit))
+		if err != nil {
+			return nil, fmt.Errorf("브랜치 히스토리 페이지 조회 실패 (%d..%d): %w", start, start+limit, err)
+		}
+		records = append(records, page...)
+	}
+	return records, nil
 }
