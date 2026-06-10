@@ -5,6 +5,7 @@ import (
 	"math/big"
 
 	"github.com/hsh-719/bit/internal/chain"
+	compactcid "github.com/hsh-719/bit/internal/cid"
 	"github.com/hsh-719/bit/internal/config"
 	"github.com/hsh-719/bit/internal/git"
 	"github.com/hsh-719/bit/internal/ipfs"
@@ -87,6 +88,10 @@ var pushCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("diff IPFS 업로드 실패 (%s): %w", info.Hash, err)
 			}
+			diffDigest, err := compactcid.DigestFromCIDV0(diffCID)
+			if err != nil {
+				return fmt.Errorf("diff CID 압축 실패 (%s): %w", diffCID, err)
+			}
 
 			m := git.ManifestForCommit(branch, info, diffCID)
 			manifestData, err := manifest.Encode(m)
@@ -96,6 +101,10 @@ var pushCmd = &cobra.Command{
 			manifestCID, err := ipfsClient.Upload(manifestData)
 			if err != nil {
 				return fmt.Errorf("manifest IPFS 업로드 실패 (%s): %w", info.Hash, err)
+			}
+			manifestDigest, err := compactcid.DigestFromCIDV0(manifestCID)
+			if err != nil {
+				return fmt.Errorf("manifest CID 압축 실패 (%s): %w", manifestCID, err)
 			}
 
 			commitHash, err := chain.GitHashToBytes20(info.Hash)
@@ -122,8 +131,8 @@ var pushCmd = &cobra.Command{
 				commitHash,
 				treeHash,
 				parentHashes,
-				manifestCID,
-				diffCID,
+				manifestDigest,
+				diffDigest,
 			); err != nil {
 				return fmt.Errorf("체인 커밋 기록 실패 (다른 사람이 먼저 push했을 수 있습니다, commit %s): %w", info.Hash, err)
 			}
