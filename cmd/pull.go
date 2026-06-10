@@ -31,46 +31,89 @@ var pullCmd = &cobra.Command{
 		}
 		repoID := new(big.Int).SetUint64(remote.RepoID)
 
-		// 2. 체인에서 브랜치 헤드 manifest CID 조회
+		// 2. 체인에서 브랜치 히스토리 조회
 		chainClient, err := chain.NewClient(cfg.RPCURL, cfg.ContractAddress, cfg.PrivateKey)
 		if err != nil {
 			return fmt.Errorf("체인 연결 실패: %w", err)
 		}
-		manifestCID, err := chainClient.GetBranchHead(repoID, branch)
+		historyLen, err := chainClient.GetBranchHistoryLength(repoID, branch)
 		if err != nil {
-			return fmt.Errorf("브랜치 헤드 조회 실패: %w", err)
+			return fmt.Errorf("브랜치 히스토리 조회 실패: %w", err)
 		}
-		if manifestCID == "" {
+		if historyLen.Sign() == 0 {
 			return fmt.Errorf("브랜치 '%s' 가 아직 push된 적 없습니다", branch)
 		}
-		fmt.Printf("manifest CID: %s\n", manifestCID)
 
-		// 3. IPFS에서 manifest JSON 다운로드
+		start := int64(0)
+		if git.HasHead(".") {
+			localHead, err := git.CurrentHead(".")
+			if err != nil {
+				return fmt.Errorf("로컬 HEAD 조회 실패: %w", err)
+			}
+			found := false
+			for i := int64(0); i < historyLen.Int64(); i++ {
+				commitHash, err := chainClient.GetBranchCommitAt(repoID, branch, big.NewInt(i))
+				if err != nil {
+					return fmt.Errorf("브랜치 히스토리 항목 조회 실패 (%d): %w", i, err)
+				}
+				if chain.Bytes20ToGitHash(commitHash) == localHead {
+					start = i + 1
+					found = true
+					break
+				}
+			}
+			if !found {
+				return fmt.Errorf("로컬 HEAD %s 는 원격 브랜치 '%s' 히스토리에 없습니다", localHead[:8], branch)
+			}
+		}
+		if start >= historyLen.Int64() {
+			fmt.Printf("%s is already up to date\n", branch)
+			return nil
+		}
+
+		fmt.Printf("브랜치: %s, 적용 커밋: %d개\n", branch, historyLen.Int64()-start)
 		ipfsClient := ipfs.NewClient(cfg.IPFSURL)
-		manifestData, err := ipfsClient.Download(manifestCID)
-		if err != nil {
-			return fmt.Errorf("manifest 다운로드 실패: %w", err)
+		for i := start; i < historyLen.Int64(); i++ {
+			commitHash, err := chainClient.GetBranchCommitAt(repoID, branch, big.NewInt(i))
+			if err != nil {
+				return fmt.Errorf("브랜치 히스토리 항목 조회 실패 (%d): %w", i, err)
+			}
+			record, err := chainClient.GetCommit(repoID, commitHash)
+			if err != nil {
+				return fmt.Errorf("체인 커밋 조회 실패 (%s): %w", chain.Bytes20ToGitHash(commitHash), err)
+			}
+
+			manifestData, err := ipfsClient.Download(record.ManifestCID)
+			if err != nil {
+				return fmt.Errorf("manifest 다운로드 실패 (%s): %w", record.ManifestCID, err)
+			}
+			m, err := manifest.Decode(manifestData)
+			if err != nil {
+				return fmt.Errorf("manifest 파싱 실패 (%s): %w", record.ManifestCID, err)
+			}
+
+			expectedCommit := chain.Bytes20ToGitHash(commitHash)
+			if m.GitCommit != expectedCommit {
+				return fmt.Errorf("manifest commit mismatch: got %s, want %s", m.GitCommit, expectedCommit)
+			}
+			if m.DiffCID != record.DiffCID {
+				return fmt.Errorf("manifest diff CID mismatch for %s", expectedCommit)
+			}
+			if m.TreeHash != chain.Bytes20ToGitHash(record.TreeHash) {
+				return fmt.Errorf("manifest tree mismatch for %s", expectedCommit)
+			}
+
+			diff, err := ipfsClient.Download(m.DiffCID)
+			if err != nil {
+				return fmt.Errorf("diff 다운로드 실패 (%s): %w", m.DiffCID, err)
+			}
+			if err := git.ApplyCommitDiff(".", m, diff); err != nil {
+				return fmt.Errorf("commit diff 적용 실패 (%s): %w", expectedCommit, err)
+			}
+			fmt.Printf("commit pull 완료: %s diff=%s\n", expectedCommit[:8], m.DiffCID)
 		}
 
-		// 4. manifest 파싱 → bundleCID 추출
-		m, err := manifest.Decode(manifestData)
-		if err != nil {
-			return fmt.Errorf("manifest 파싱 실패: %w", err)
-		}
-		fmt.Printf("bundle CID: %s, 커밋: %s\n", m.BundleCID, m.GitCommit[:8])
-
-		// 5. IPFS에서 bundle 다운로드
-		bundle, err := ipfsClient.Download(m.BundleCID)
-		if err != nil {
-			return fmt.Errorf("bundle 다운로드 실패: %w", err)
-		}
-
-		// 6. 로컬 .git에 bundle 반영
-		if err := git.ApplyBundle(".", bundle); err != nil {
-			return fmt.Errorf("bundle 적용 실패: %w", err)
-		}
-
-		fmt.Printf("pull 완료: %s (%s)\n", branch, m.GitCommit[:8])
+		fmt.Printf("pull 완료: %s\n", branch)
 		return nil
 	},
 }
