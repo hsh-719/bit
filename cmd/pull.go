@@ -98,7 +98,7 @@ var pullCmd = &cobra.Command{
 				return fmt.Errorf("manifest tree mismatch for %s", expectedCommit)
 			}
 
-			diff, err := ipfsClient.Download(m.DiffCID)
+			diff, err := ipfsClient.Download(diffCID)
 			if err != nil {
 				return fmt.Errorf("diff 다운로드 실패 (%s): %w", m.DiffCID, err)
 			}
@@ -113,19 +113,3 @@ var pullCmd = &cobra.Command{
 	},
 }
 
-func loadBranchRecords(chainClient *chain.Client, repoID *big.Int, branch string, total int64) ([]chain.BranchCommitRecord, error) {
-	const pageSize int64 = 100
-	records := make([]chain.BranchCommitRecord, 0, total)
-	for start := int64(0); start < total; start += pageSize {
-		limit := pageSize
-		if remaining := total - start; remaining < limit {
-			limit = remaining
-		}
-		page, err := chainClient.GetBranchCommitsWithMetadata(repoID, branch, big.NewInt(start), big.NewInt(limit))
-		if err != nil {
-			return nil, fmt.Errorf("브랜치 히스토리 페이지 조회 실패 (%d..%d): %w", start, start+limit, err)
-		}
-		records = append(records, page...)
-	}
-	return records, nil
-}

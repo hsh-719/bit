@@ -1,8 +1,10 @@
 # bit
 
-IPFS와 블록체인 위에서 동작하는 탈중앙화 버전 관리 시스템입니다.
+IPFS와 이더리움 블록체인 위에서 동작하는 탈중앙화 버전 관리 시스템(DVCS).
 
-커밋 diff와 manifest는 IPFS에, 브랜치/커밋 상태는 스마트 컨트랙트(BitRegistry)에 저장됩니다.
+커밋 diff와 메타데이터는 IPFS에, 브랜치/커밋 상태는 스마트 컨트랙트(BitRegistry)에 저장됩니다.
+중앙 서버 없이 코드 히스토리를 영구적으로 보존하고 누구나 검증할 수 있습니다.
+
 
 ---
 
@@ -10,14 +12,13 @@ IPFS와 블록체인 위에서 동작하는 탈중앙화 버전 관리 시스템
 
 **사전 조건**
 
-- Go 1.21+
-- IPFS 데몬 (`ipfs daemon`)
+- Go 1.25.0+
+- IPFS 데몬 (Kubo) — `ipfs daemon`
 - 이더리움 노드 접근 (로컬: Anvil, 테스트넷: Sepolia 등)
 
 ```bash
 git clone https://github.com/hsh-719/bit.git
 cd bit
-go mod tidy
 go build -o bit .
 
 # 전역 명령어로 등록 (선택)
@@ -26,51 +27,70 @@ sudo cp ./bit /usr/local/bin/bit
 
 ---
 
+## 로컬 테스트 환경 구성
+
+터미널 3개를 열어 순서대로 실행합니다.
+
+**터미널 1 — Anvil 실행**
+```bash
+anvil
+# 출력에서 private key 복사 (기본 첫 번째 키 사용)
+```
+
+**터미널 2 — IPFS 데몬 실행**
+```bash
+ipfs daemon
+```
+
+**터미널 3 — 컨트랙트 배포**
+```bash
+cd contracts
+forge create --broadcast \
+  --rpc-url http://127.0.0.1:8545 \
+  --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
+  src/BitRegistry.sol:BitRegistry
+# 출력의 "Deployed to: 0x..." 주소를 --contract 플래그에 사용
+```
+
+---
+
 ## 빠른 시작
 
 ### 1. 저장소 초기화
 
-기존 git 저장소 디렉토리에서 실행합니다.
-
 ```bash
-cd my-project      # .git이 있는 디렉토리
-git init           # 아직 git init 안 했다면
+mkdir my-project && cd my-project
+git init
 
 bit init \
   --rpc http://127.0.0.1:8545 \
   --contract 0xYourContractAddress \
-  --key YourPrivateKeyHex
+  --key ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+# --ipfs 생략 시 기본값: http://localhost:5001
 ```
 
-성공하면 `.bit/config.json`이 생성되고 체인에 저장소가 등록됩니다.
-
-> `--ipfs` 플래그 생략 시 기본값 `http://localhost:5001` 사용
+성공하면 `.bit/config.json`이 생성되고 체인에 저장소가 등록됩니다 (repoId 발급).
 
 ### 2. remote 추가
 
-push/pull 대상을 등록합니다. URL 형식: `bit://<network>/<contractAddress>/<repoId>`
-
 ```bash
+# URL 형식: bit://<network>/<contractAddress>/<repoId>
 bit remote add origin bit://local/0xYourContractAddress/1
 ```
 
-`repoId`는 `bit init` 실행 후 출력되는 숫자입니다.
-
 ### 3. push
 
-현재 브랜치에서 아직 체인에 기록되지 않은 커밋들을 커밋 단위 diff로 IPFS에 올리고,
-브랜치 상태와 커밋 메타데이터를 체인에 기록합니다.
-
 ```bash
+git add . && git commit -m "first commit"
 bit push origin
+# 현재 브랜치를 자동 감지해서 push
 ```
 
-> 현재 CLI는 diff-only 재현성을 위해 linear history 커밋을 대상으로 동작합니다.
-> merge commit push는 아직 지원하지 않습니다.
+> merge commit push는 지원하지 않습니다 (linear history only).
 
 ### 4. pull
 
-다른 디렉토리(또는 다른 팀원)에서 코드를 받아옵니다.
+다른 머신이나 디렉토리에서 코드를 받아옵니다.
 
 ```bash
 mkdir other-project && cd other-project
@@ -82,69 +102,93 @@ bit init \
   --key YourPrivateKeyHex
 
 bit remote add origin bit://local/0xYourContractAddress/1
-
 bit pull origin main
 ```
 
----
+### 5. fork
 
-## 명령어 요약
-
-| 명령어 | 설명 |
-|---|---|
-| `bit init --rpc <url> --contract <addr> --key <key>` | 저장소 초기화 및 체인 등록 |
-| `bit remote add <name> <url>` | remote 추가 |
-| `bit push <remote>` | 현재 브랜치를 push |
-| `bit pull <remote> <branch>` | 지정 브랜치를 pull |
-
----
-
-## 동작 원리
-
-```
-push:
-  로컬 .git → 누락 커밋 목록 계산
-            → 커밋별 binary diff → IPFS (diffCID)
-            → 커밋 manifest JSON → IPFS (manifestCID)
-            → 스마트 컨트랙트 (branch head commit, tree, parents, manifestCID, diffCID 기록)
-
-pull:
-  스마트 컨트랙트 (branch history 조회)
-    → 누락 커밋별 manifest 다운로드
-    → 누락 커밋별 diff 다운로드
-    → manifest의 author/committer/message/tree/parent 정보로 원본 커밋 재구성
-```
-
-### IPFS/체인 저장 모델
-
-- IPFS에는 전체 bundle 대신 `git diff --binary --full-index` 형식의 커밋별 diff와 manifest가 저장됩니다.
-- manifest에는 원본 커밋 해시, tree 해시, 부모 커밋, author/committer, 커밋 메시지, diff CID가 포함됩니다.
-- 체인에는 브랜치별 최신 commit, branch history, commit tree hash, parent hash, manifest CID digest, diff CID digest가 저장됩니다.
-- Git SHA-1 커밋/트리 해시는 `bytes20`으로 저장해 기존 동적 문자열 저장보다 온체인 저장량을 줄입니다.
-- IPFS CID는 온체인에서 ASCII 문자열이 아니라 CIDv0 sha2-256 digest인 `bytes32`로 저장됩니다.
-- 브랜치 head는 최신 commit만 저장하고, manifest CID digest는 commit record에만 저장해 중복 저장을 피합니다.
-- pull은 브랜치 히스토리와 commit metadata를 페이지 단위로 조회해 커밋당 RPC 호출 수를 줄입니다.
-
----
-
-## 로컬 테스트 환경 (Anvil)
+다른 사람의 저장소를 fork해서 내 저장소로 만듭니다.
+빈 디렉토리에서 실행하면 `git init`까지 자동으로 처리됩니다.
 
 ```bash
-# 1. Anvil 실행
-anvil
+mkdir my-fork && cd my-fork
 
-# 2. 컨트랙트 배포
-cd contracts
-forge create --broadcast --rpc-url http://127.0.0.1:8545 \
-  --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
-  src/BitRegistry.sol:BitRegistry
-
-# 3. IPFS 데몬 실행
-ipfs daemon
+bit fork bit://local/0xContractAddress/1 \
+  --rpc http://127.0.0.1:8545 \
+  --contract 0xYourContractAddress \
+  --key YourPrivateKeyHex
+# --branch 생략 시 기본값: main
 ```
 
-배포 후 출력되는 `Deployed to:` 주소를 `--contract` 플래그에 사용합니다.
+fork 완료 후 자동으로 설정됩니다:
+- `origin` → 내 fork (새로 생성된 저장소)
+- `upstream` → 원본 저장소
 
+이후 새 커밋을 만들고 `bit push origin`으로 내 fork에 push할 수 있습니다.
+
+---
+
+## 명령어 참조
+
+### `bit init`
+
+```
+bit init --rpc <url> --contract <addr> --key <privkey> [--ipfs <url>]
+```
+
+- `.git`이 없으면 에러. 먼저 `git init` 필요.
+- 체인에 저장소를 생성하고 `.bit/config.json`을 저장합니다.
+
+### `bit remote add`
+
+```
+bit remote add <name> <url>
+```
+
+- URL 형식: `bit://<network>/<contractAddress>/<repoId>`
+
+### `bit push`
+
+```
+bit push <remote>
+```
+
+- 현재 브랜치를 자동 감지합니다 (인자 없음).
+- 체인의 현재 헤드 이후 커밋들을 순서대로 push합니다.
+- 각 커밋마다 diff와 manifest를 IPFS에 업로드하고 체인에 기록합니다.
+
+### `bit pull`
+
+```
+bit pull <remote> <branch>
+```
+
+- 로컬 HEAD가 원격 히스토리에 없으면 에러 (diverged).
+- 누락 커밋을 IPFS에서 받아 원본 커밋을 완전히 재구성합니다 (커밋 hash 보존).
+
+### `bit fork`
+
+```
+bit fork <bitURL> [--rpc <url>] [--contract <addr>] [--key <key>] [--ipfs <url>] [--branch <branch>]
+```
+
+- `.git`이 없으면 자동으로 `git init`을 실행합니다.
+- `--rpc/--contract/--key` 생략 시 기존 `.bit/config.json`에서 읽습니다.
+- 원본 저장소(A)의 IPFS diff를 그대로 참조하므로 IPFS 재업로드가 없습니다.
+- fork된 저장소(B)의 체인에는 A와 동일한 IPFS digest 포인터가 기록됩니다.
+
+---
+
+## 권한 모델 (BitRegistry)
+
+| Role | 권한 |
+|------|------|
+| Owner | setRole로 다른 사용자 역할 지정 |
+| Maintainer | push(recordCommit), PR 승인/거부 |
+| Contributor | 역할 없음 (현재 미사용) |
+| None | 조회만 가능 |
+
+저장소 생성자는 자동으로 Owner + Maintainer가 됩니다.
 
 ---
 
@@ -153,13 +197,33 @@ ipfs daemon
 ```
 bit/
 ├── main.go
-├── cmd/                  # CLI 명령어 (init, push, pull, remote)
+├── cmd/
+│   ├── root.go       # 루트 커맨드, 서브커맨드 등록
+│   ├── common.go     # 공용 함수 (loadBranchRecords)
+│   ├── init.go       # bit init
+│   ├── remote.go     # bit remote add
+│   ├── push.go       # bit push
+│   ├── pull.go       # bit pull
+│   ├── fork.go       # bit fork
+│   └── pr.go         # bit pr (WIP)
 ├── internal/
-│   ├── chain/            # 스마트 컨트랙트 연동 (go-ethereum)
-│   ├── git/              # .git 읽기/쓰기 (go-git)
-│   ├── ipfs/             # IPFS 업로드/다운로드
-│   ├── manifest/         # manifest JSON 인코딩/디코딩
-│   └── config/           # .bit/config.json 관리
+│   ├── chain/        # BitRegistry 컨트랙트 연동 (go-ethereum)
+│   ├── git/          # .git 읽기/쓰기 (go-git + exec git)
+│   ├── ipfs/         # IPFS HTTP API 클라이언트
+│   ├── cid/          # CIDv0 ↔ bytes32 변환 (외부 의존성 없음)
+│   ├── manifest/     # manifest JSON 인코딩/디코딩
+│   └── config/       # .bit/config.json 관리
 └── contracts/
-    └── src/BitRegistry.sol
+    └── src/BitRegistry.sol   # Solidity 컨트랙트
 ```
+
+---
+
+## 의존성
+
+| 패키지 | 용도 |
+|--------|------|
+| `go-ethereum v1.13.14` | 이더리움 클라이언트, ABI 바인딩 |
+| `go-git/v5 v5.19.1` | git 저장소 읽기 |
+| `cobra v1.8.0` | CLI 프레임워크 |
+| `golang.org/x/crypto v0.50.0` | 암호화 유틸리티 |
