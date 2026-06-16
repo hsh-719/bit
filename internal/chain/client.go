@@ -49,6 +49,11 @@ type BranchCommitRecord struct {
 	DiffDigest     [32]byte
 }
 
+type RepoRecord struct {
+	Owner       common.Address
+	MetadataCID string
+}
+
 // Client는 BitRegistry 스마트 컨트랙트와 통신하는 클라이언트다.
 type Client struct {
 	contractAddress common.Address
@@ -163,6 +168,26 @@ func (c *Client) GetBranchHead(repoID *big.Int, branch string) (string, error) {
 	}
 	cid := *abi.ConvertType(out[0], new([]byte)).(*[]byte)
 	return string(cid), nil
+}
+
+func (c *Client) GetRepoCount() (*big.Int, error) {
+	out, err := c.call("getRepoCount")
+	if err != nil {
+		return nil, err
+	}
+	return *abi.ConvertType(out[0], new(*big.Int)).(**big.Int), nil
+}
+
+func (c *Client) GetRepo(repoID *big.Int) (*RepoRecord, error) {
+	out, err := c.call("getRepo", repoID)
+	if err != nil {
+		return nil, err
+	}
+	metadataCID := *abi.ConvertType(out[1], new([]byte)).(*[]byte)
+	return &RepoRecord{
+		Owner:       *abi.ConvertType(out[0], new(common.Address)).(*common.Address),
+		MetadataCID: string(metadataCID),
+	}, nil
 }
 
 func (c *Client) GetBranchCommit(repoID *big.Int, branch string) ([20]byte, error) {
