@@ -126,6 +126,25 @@ fork 완료 후 자동으로 설정됩니다:
 
 이후 새 커밋을 만들고 `bit push origin`으로 내 fork에 push할 수 있습니다.
 
+### 6. 웹 explorer
+
+현재 체인에 등록된 저장소 목록과 각 저장소의 커밋 메타데이터를 읽기 전용으로 확인할 수 있습니다.
+
+```bash
+npm install
+npm run web:dev
+```
+
+브라우저에서 표시되는 URL로 접속한 뒤 다음 값을 입력합니다.
+
+- RPC URL: Anvil 또는 테스트넷 RPC URL
+- Contract: 배포된 `BitRegistry` 컨트랙트 주소
+- IPFS Gateway: 예: `http://127.0.0.1:8080/ipfs`
+- Branch: 기본값 `main`
+
+웹 화면은 커밋 메시지, 작성자, 작성일, 온체인 기록자, 온체인 기록 시간, 부모 커밋만 표시합니다. diff 내용은 표시하지 않습니다.
+다만 현재 diff CID는 온체인/IPFS에 공개되어 있으므로, 이는 UI 제한입니다. 코드 diff 자체를 비공개로 만들려면 diff 암호화와 권한별 복호화 키 관리가 추가로 필요합니다.
+
 ---
 
 ## 명령어 참조
@@ -133,11 +152,13 @@ fork 완료 후 자동으로 설정됩니다:
 ### `bit init`
 
 ```
-bit init --rpc <url> --contract <addr> --key <privkey> [--ipfs <url>]
+bit init --rpc <url> --contract <addr> --key <privkey> [--ipfs <url>] [--name <repo-name>] [--description <text>] [--branch <branch>]
 ```
 
 - `.git`이 없으면 에러. 먼저 `git init` 필요.
-- 체인에 저장소를 생성하고 `.bit/config.json`을 저장합니다.
+- 저장소 metadata를 IPFS에 업로드한 뒤 체인에 저장소를 생성하고 `.bit/config.json`을 저장합니다.
+- `--name` 생략 시 현재 디렉토리명이 웹 표시 이름으로 사용됩니다.
+- `--branch` 생략 시 `main`이 웹 기본 브랜치로 사용됩니다.
 
 ### `bit remote add`
 
