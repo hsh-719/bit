@@ -2,9 +2,21 @@
   "name": "bit",
   "type": "module",
   "scripts": {
-    "compile": "node scripts/compile-contract.mjs"
+    "compile": "node scripts/compile-contract.mjs",
+    "web:dev": "vite --host 0.0.0.0",
+    "web:build": "vite build"
   },
   "dependencies": {
-    "solc": "^0.8.20"
+    "@vitejs/plugin-react": "^5.2.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "solc": "^0.8.20",
+    "typescript": "^5.9.3",
+    "viem": "^2.52.2",
+    "vite": "^7.3.5"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3"
   }
 }

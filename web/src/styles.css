@@ -1,0 +1,233 @@
+:root {
+  color: #17201b;
+  background: #eef2ef;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: 1px solid #26352d;
+  background: #26352d;
+  color: #ffffff;
+  border-radius: 6px;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.app {
+  min-height: 100vh;
+  padding: 28px;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-end;
+  margin-bottom: 18px;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 30px;
+  line-height: 1.1;
+}
+
+h2 {
+  font-size: 22px;
+  line-height: 1.25;
+  margin-top: 4px;
+}
+
+h3 {
+  font-size: 16px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.toolbar p,
+.historyHeader p,
+.commit p {
+  color: #5a665f;
+  margin-top: 6px;
+}
+
+.settings {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) minmax(220px, 1fr) 140px;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  color: #435049;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #b9c4bd;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #17201b;
+  padding: 10px 12px;
+}
+
+.error {
+  margin-bottom: 16px;
+  padding: 12px;
+  border-left: 4px solid #b42318;
+  background: #fff3f0;
+  color: #8a1f14;
+}
+
+.content {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.repos,
+.history {
+  min-width: 0;
+}
+
+.sectionTitle {
+  color: #59665f;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.repo {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 10px;
+  text-align: left;
+  border: 1px solid #c9d3ce;
+  background: #ffffff;
+  color: #17201b;
+  margin-bottom: 8px;
+}
+
+.repo.selected {
+  border-color: #26352d;
+  box-shadow: inset 3px 0 0 #26352d;
+}
+
+.repoName {
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.owner {
+  grid-column: 1 / -1;
+  color: #5a665f;
+  font-size: 13px;
+}
+
+.mono {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.historyHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.commitList {
+  display: grid;
+  gap: 10px;
+}
+
+.commit {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.9fr) minmax(0, 1.4fr);
+  gap: 16px;
+  border: 1px solid #c9d3ce;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 6px 12px;
+  margin: 0;
+}
+
+dt {
+  color: #5a665f;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+dd {
+  margin: 0;
+  min-width: 0;
+}
+
+@media (max-width: 980px) {
+  .settings,
+  .content,
+  .commit {
+    grid-template-columns: 1fr;
+  }
+
+  .toolbar,
+  .historyHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 560px) {
+  .app {
+    padding: 18px;
+  }
+
+  dl {
+    grid-template-columns: 1fr;
+  }
+}
