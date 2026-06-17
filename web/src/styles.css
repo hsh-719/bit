@@ -116,6 +116,35 @@ button {
   justify-content: flex-end;
 }
 
+.headerField {
+  display: grid;
+  gap: 3px;
+  min-width: 280px;
+}
+
+.headerField span {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(239, 243, 239, 0.46);
+}
+
+.headerInput {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #eff3ef;
+  outline: none;
+}
+
+.headerInput:focus {
+  border-color: rgba(124, 211, 156, 0.36);
+  box-shadow: 0 0 0 3px rgba(124, 211, 156, 0.08);
+}
+
 .headerChip {
   display: grid;
   gap: 3px;
@@ -154,6 +183,9 @@ button:disabled {
 
 .page {
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 44px;
 }
 
 .heroBand,
@@ -398,6 +430,22 @@ input:focus {
 .projectsBand,
 .detailBand {
   padding-top: 38px;
+}
+
+.siteFooter {
+  position: fixed;
+  right: 16px;
+  bottom: 14px;
+  z-index: 40;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(5, 6, 7, 0.82);
+  backdrop-filter: blur(12px);
+  color: rgba(239, 243, 239, 0.42);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .bandHeading {
@@ -784,6 +832,11 @@ input:focus {
 
   .headerActions {
     justify-content: flex-start;
+  }
+
+  .headerField {
+    min-width: 0;
+    width: 100%;
   }
 
   .heroVisual {

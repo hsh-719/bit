@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   createPublicClient,
@@ -10,6 +10,7 @@ import {
   type Address,
   type Hex,
 } from "viem";
+import { sepolia } from "viem/chains";
 import bitRegistryArtifact from "../../internal/chain/artifacts/BitRegistry.json";
 import "./styles.css";
 
@@ -92,10 +93,12 @@ declare global {
 }
 
 const abi = bitRegistryArtifact.abi;
-const defaultRpcURL = localStorage.getItem("bit.rpcURL") ?? "http://127.0.0.1:8545";
-const defaultContract = localStorage.getItem("bit.contract") ?? "";
-const defaultGateway = localStorage.getItem("bit.ipfsGateway") ?? "http://127.0.0.1:8080/ipfs";
-const defaultIpfsAPI = localStorage.getItem("bit.ipfsAPI") ?? "http://127.0.0.1:5001";
+const defaultRpcURL = readStoredValue("bit.rpcURL") ?? "https://ethereum-sepolia-rpc.publicnode.com";
+const defaultContract = readStoredValue("bit.contract") ?? "0x34B9D83E03E2E7BF646E2452E0620E2F39cDbeE3";
+const defaultGateway = readStoredValue("bit.ipfsGateway") ?? "https://ipfs.sugang.click/ipfs";
+const defaultIpfsAPI = "http://127.0.0.1:5001";
+const APP_VERSION = "1.0.6";
+const LOG_BLOCK_RANGE = 50_000n;
 const ROLE_LABELS = ["None", "Contributor", "Maintainer", "Owner"] as const;
 type RoleLabel = (typeof ROLE_LABELS)[number];
 
@@ -123,6 +126,9 @@ function App() {
 
   const publicClient = useMemo(() => createPublicClient({ transport: http(rpcURL) }), [rpcURL]);
   const selectedRepo = repos.find((repo) => repo.id === selectedRepoId) ?? null;
+  const autoLoadedRouteRef = useRef<string | null>(null);
+  const detailRepo =
+    selectedRepo ?? (selectedRepoId ? { id: selectedRepoId, owner: "0x0000000000000000000000000000000000000000" as Address, metadataCID: "", metadata: null } : null);
   const branchNameByHash = useMemo(() => {
     const map = new Map<string, string>();
     for (const branch of branches) {
@@ -158,15 +164,29 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repos, rpcURL, contractAddress, ipfsGateway, walletAddress]);
 
+  useEffect(() => {
+    if (page === "home") {
+      autoLoadedRouteRef.current = null;
+      return;
+    }
+    if (!selectedRepoId) return;
+    if (!/^0x[a-fA-F0-9]{40}$/.test(contractAddress)) return;
+    const repo = repos.find((item) => item.id === selectedRepoId);
+    const branch = selectedBranch || repo?.metadata?.defaultBranch || "main";
+    const routeKey = `${contractAddress}:${selectedRepoId.toString()}:${branch}`;
+    if (autoLoadedRouteRef.current === routeKey) return;
+    autoLoadedRouteRef.current = routeKey;
+    void loadRepoDetail(selectedRepoId, repos, branch);
+  }, [page, repos, selectedRepoId, selectedBranch, contractAddress]);
+
   async function loadRepos() {
     setLoadingRepos(true);
     setError("");
     try {
       const address = parseAddress(contractAddress);
-      localStorage.setItem("bit.rpcURL", rpcURL);
-      localStorage.setItem("bit.contract", contractAddress);
-      localStorage.setItem("bit.ipfsGateway", ipfsGateway);
-      localStorage.setItem("bit.ipfsAPI", defaultIpfsAPI);
+      writeStoredValue("bit.rpcURL", rpcURL);
+      writeStoredValue("bit.contract", contractAddress);
+      writeStoredValue("bit.ipfsGateway", ipfsGateway);
 
       const count = (await publicClient.readContract({
         address,
@@ -214,6 +234,7 @@ function App() {
     setSelectedBranch(branch);
     setActiveTab("commits");
     setCopyState("idle");
+    autoLoadedRouteRef.current = `${repoId.toString()}:${branch}`;
     await loadRepoDetail(repoId, repos, branch);
   }
 
@@ -285,6 +306,35 @@ function App() {
         }),
       );
 
+      setCommits(nextCommits.reverse());
+      await loadRepoPullRequests(repoId);
+
+      try {
+        await loadRepoBranches(repoId, repoLookup, branch);
+        if (walletAddress) {
+          const role = (await publicClient.readContract({
+            address,
+            abi,
+            functionName: "getRole",
+            args: [repoId, walletAddress],
+          })) as bigint;
+          setRepoRole(roleToLabel(role));
+        } else {
+          setRepoRole("None");
+        }
+      } catch (err) {
+        setError(errorMessage(err));
+      }
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setLoadingDetail(false);
+    }
+  }
+
+  async function loadRepoPullRequests(repoId: bigint, repoLookup: RepoSummary[] = repos) {
+    try {
+      const address = parseAddress(contractAddress);
       const prCount = (await publicClient.readContract({
         address,
         abi,
@@ -305,68 +355,45 @@ function App() {
           abi,
           functionName: "getPullRequest",
           args: [prId],
-        })) as [
-          bigint,
-          bigint,
-          Hex,
-          bigint,
-          Hex,
-          Hex,
-          Hex,
-          Address,
-          bigint,
-          bigint,
-          bigint,
-        ];
-        if (pr[8] !== 1n) continue;
+        })) as PullRequestSummary;
+        if (BigInt(pr.status as number | bigint) !== 1n) continue;
         nextPullRequests.push({
-          id: pr[0],
-          targetRepoId: pr[1],
-          targetBranch: pr[2],
-          sourceRepoId: pr[3],
-          sourceBranch: pr[4],
-          baseCommit: pr[5],
-          sourceHeadCommit: pr[6],
-          author: pr[7],
-          status: pr[8],
-          createdAt: pr[9],
-          updatedAt: pr[10],
+          id: pr.id,
+          targetRepoId: pr.targetRepoId,
+          targetBranch: pr.targetBranch,
+          sourceRepoId: pr.sourceRepoId,
+          sourceBranch: pr.sourceBranch,
+          baseCommit: pr.baseCommit,
+          sourceHeadCommit: pr.sourceHeadCommit,
+          author: pr.author,
+          status: BigInt(pr.status as number | bigint),
+          createdAt: pr.createdAt,
+          updatedAt: pr.updatedAt,
         });
       }
-
-      setCommits(nextCommits.reverse());
       setPullRequests(nextPullRequests);
-      await loadRepoBranches(repoId, repoLookup, branch);
-
-      if (walletAddress) {
-        const role = (await publicClient.readContract({
-          address,
-          abi,
-          functionName: "getRole",
-          args: [repoId, walletAddress],
-        })) as bigint;
-        setRepoRole(roleToLabel(role));
-      } else {
-        setRepoRole("None");
-      }
     } catch (err) {
       setError(errorMessage(err));
-    } finally {
-      setLoadingDetail(false);
     }
   }
 
   async function loadRepoBranches(repoId: bigint, repoLookup: RepoSummary[] = repos, defaultBranch = "main") {
     try {
       const repo = repoLookup.find((item) => item.id === repoId) ?? selectedRepo;
-      const logs = await publicClient.getContractEvents({
-        address: parseAddress(contractAddress),
-        abi,
-        eventName: "CommitRecorded",
-        args: { repoId },
-        fromBlock: 0n,
-        toBlock: "latest",
-      });
+      const latestBlock = await publicClient.getBlockNumber();
+      const logs = [];
+      for (let fromBlock = 0n; fromBlock <= latestBlock; fromBlock += LOG_BLOCK_RANGE) {
+        const toBlock = fromBlock + LOG_BLOCK_RANGE - 1n > latestBlock ? latestBlock : fromBlock + LOG_BLOCK_RANGE - 1n;
+        const page = await publicClient.getContractEvents({
+          address: parseAddress(contractAddress),
+          abi,
+          eventName: "CommitRecorded",
+          args: { repoId },
+          fromBlock,
+          toBlock,
+        });
+        logs.push(...page);
+      }
 
       const nextBranches = new Map<string, BranchSummary>();
       for (const log of logs) {
@@ -429,9 +456,15 @@ function App() {
     setLoadingAction(`approve-${prId.toString()}`);
     setError("");
     try {
+      const chainId = (await window.ethereum.request({ method: "eth_chainId" })) as string;
+      if (Number.parseInt(chainId, 16) !== sepolia.id) {
+        setError("MetaMask network를 Sepolia로 변경하세요.");
+        return;
+      }
       const address = parseAddress(contractAddress);
       const walletClient = createWalletClient({
         account: walletAddress,
+        chain: sepolia,
         transport: custom(window.ethereum),
       });
       const txHash = await walletClient.writeContract({
@@ -450,12 +483,12 @@ function App() {
   }
 
   async function copyForkCommand() {
-    if (!selectedRepo) return;
+    if (!detailRepo) return;
 
     const command = buildForkCommand({
       contractAddress,
-      repoId: selectedRepo.id,
-      branch: selectedBranch || selectedRepo.metadata?.defaultBranch || "main",
+      repoId: detailRepo.id,
+      branch: selectedBranch || detailRepo.metadata?.defaultBranch || "main",
       rpcURL,
       ipfsAPI: defaultIpfsAPI,
     });
@@ -488,10 +521,15 @@ function App() {
         </a>
 
         <div className="headerActions">
-          <div className="headerChip">
+          <label className="headerField">
             <span>Contract</span>
-            <strong className="mono">{contractSummary}</strong>
-          </div>
+            <input
+              className="headerInput mono"
+              value={contractAddress}
+              onChange={(event) => setContractAddress(event.target.value)}
+              placeholder="0x..."
+            />
+          </label>
           {walletAddress ? (
             <div className="headerChip headerWalletChip">
               <span>MetaMask</span>
@@ -573,16 +611,16 @@ function App() {
         </>
       )}
 
-      {page === "project" && selectedRepo && (
+      {page === "project" && detailRepo && (
         <section className="detailBand" id="detail-band">
           <header className="detailHeader">
             <div>
               <div className="eyebrow">Project</div>
-              <h2>{selectedRepo.metadata?.name || "Project detail"}</h2>
-              <p>{selectedRepo.metadata?.description || "Metadata and pull request state for the selected repository."}</p>
+              <h2>{detailRepo.metadata?.name || `Repo #${detailRepo.id}`}</h2>
+              <p>{detailRepo.metadata?.description || "Metadata and pull request state for the selected repository."}</p>
             </div>
             <div className="detailHeaderActions">
-              <button type="button" className="ghostButton copyButton" onClick={() => void copyForkCommand()} disabled={!selectedRepo}>
+              <button type="button" className="ghostButton copyButton" onClick={() => void copyForkCommand()} disabled={!detailRepo}>
                 {copyState === "copied" ? "Copied fork command" : "Copy fork command"}
               </button>
             </div>
@@ -653,6 +691,7 @@ function App() {
                             window.history.pushState({}, "", nextPath);
                             setSelectedBranch(branch.name);
                             setCopyState("idle");
+                            autoLoadedRouteRef.current = `${selectedRepo.id.toString()}:${branch.name}`;
                             void loadRepoDetail(selectedRepo.id, repos, branch.name);
                           }}
                         >
@@ -671,21 +710,21 @@ function App() {
                     <div className="panelHeading">
                       <div>
                         <span className="eyebrow">Repository</span>
-                        <h3>{selectedRepo.metadata?.name || `Repo #${selectedRepo.id}`}</h3>
+                        <h3>{detailRepo.metadata?.name || `Repo #${detailRepo.id}`}</h3>
                       </div>
                     </div>
                     <div className="kvList">
                       <div>
                         <span>Owner</span>
-                        <strong className="mono">{shortAddress(selectedRepo.owner)}</strong>
+                        <strong className="mono">{shortAddress(detailRepo.owner)}</strong>
                       </div>
                       <div>
                         <span>Default branch</span>
-                        <strong>{selectedBranch || selectedRepo.metadata?.defaultBranch || "main"}</strong>
+                        <strong>{selectedBranch || detailRepo.metadata?.defaultBranch || "main"}</strong>
                       </div>
                       <div>
                         <span>Metadata CID</span>
-                        <strong className="mono">{selectedRepo.metadataCID || "n/a"}</strong>
+                        <strong className="mono">{detailRepo.metadataCID || "n/a"}</strong>
                       </div>
                     </div>
                   </aside>
@@ -788,6 +827,10 @@ function App() {
           </div>
         </section>
       )}
+
+      <footer className="siteFooter">
+        <span className="mono">v{APP_VERSION}</span>
+      </footer>
     </main>
   );
 }
@@ -824,10 +867,11 @@ function buildForkCommand(options: {
 }
 
 function parseAddress(value: string): Address {
-  if (!/^0x[a-fA-F0-9]{40}$/.test(value)) {
+  const normalized = value.trim();
+  if (!/^0x[a-fA-F0-9]{40}$/.test(normalized)) {
     throw new Error("Contract address must be a 20-byte hex address.");
   }
-  return value as Address;
+  return normalized as Address;
 }
 
 function bytesHexToString(value: Hex): string {
@@ -935,6 +979,22 @@ function roleToLabel(value: bigint): RoleLabel {
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+function readStoredValue(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredValue(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Ignore storage failures in private mode or restricted environments.
+  }
 }
 
 createRoot(document.getElementById("root")!).render(
