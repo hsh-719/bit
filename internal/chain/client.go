@@ -49,6 +49,11 @@ type BranchCommitRecord struct {
 	DiffDigest     [32]byte
 }
 
+type RepoRecord struct {
+	Owner       common.Address
+	MetadataCID string
+}
+
 // Client는 BitRegistry 스마트 컨트랙트와 통신하는 클라이언트다.
 type Client struct {
 	contractAddress common.Address
@@ -165,6 +170,26 @@ func (c *Client) GetBranchHead(repoID *big.Int, branch string) (string, error) {
 	return string(cid), nil
 }
 
+func (c *Client) GetRepoCount() (*big.Int, error) {
+	out, err := c.call("getRepoCount")
+	if err != nil {
+		return nil, err
+	}
+	return *abi.ConvertType(out[0], new(*big.Int)).(**big.Int), nil
+}
+
+func (c *Client) GetRepo(repoID *big.Int) (*RepoRecord, error) {
+	out, err := c.call("getRepo", repoID)
+	if err != nil {
+		return nil, err
+	}
+	metadataCID := *abi.ConvertType(out[1], new([]byte)).(*[]byte)
+	return &RepoRecord{
+		Owner:       *abi.ConvertType(out[0], new(common.Address)).(*common.Address),
+		MetadataCID: string(metadataCID),
+	}, nil
+}
+
 func (c *Client) GetBranchCommit(repoID *big.Int, branch string) ([20]byte, error) {
 	out, err := c.call("getBranchCommit", repoID, branchNameToBytes32(branch))
 	if err != nil {
@@ -251,6 +276,45 @@ func (c *Client) RecordCommit(
 	}
 	_, err = c.waitSuccessful(tx)
 	return err
+}
+
+func (c *Client) CreatePullRequest(
+	targetRepoID *big.Int,
+	targetBranch string,
+	sourceRepoID *big.Int,
+	sourceBranch string,
+) (*big.Int, error) {
+	tx, err := c.contract.Transact(
+		c.auth,
+		"createPullRequest",
+		targetRepoID,
+		branchNameToBytes32(targetBranch),
+		sourceRepoID,
+		branchNameToBytes32(sourceBranch),
+	)
+	if err != nil {
+		return nil, err
+	}
+	receipt, err := c.waitSuccessful(tx)
+	if err != nil {
+		return nil, err
+	}
+
+	parsedABI, err := loadArtifactABI()
+	if err != nil {
+		return nil, err
+	}
+	event, ok := parsedABI.Events["PullRequestCreated"]
+	if !ok {
+		return nil, errors.New("PullRequestCreated event missing from ABI")
+	}
+	for _, log := range receipt.Logs {
+		if log.Address == c.contractAddress && len(log.Topics) > 1 && log.Topics[0] == event.ID {
+			return new(big.Int).SetBytes(log.Topics[1].Bytes()), nil
+		}
+	}
+
+	return nil, errors.New("PullRequestCreated event not found in transaction receipt")
 }
 
 // CreateRepo는 체인에 새 저장소를 생성하고 repoId를 반환한다.

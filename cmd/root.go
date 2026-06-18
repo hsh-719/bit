@@ -22,4 +22,5 @@ func init() {
 	rootCmd.AddCommand(pushCmd)
 	rootCmd.AddCommand(pullCmd)
 	rootCmd.AddCommand(forkCmd)
+	rootCmd.AddCommand(prCmd)
 }

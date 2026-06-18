@@ -12,11 +12,17 @@ test/
 # 환경변수 파일 (개인키 등 민감 정보)
 .env
 .bit/
+*.pem
+*.key
+*.env
+.env.*
 
 # Go 캐시
 *.out
 
 node_modules/
+dist/
+out/
 
 spec.md
 HANDOVER.md

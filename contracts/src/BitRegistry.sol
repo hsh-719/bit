@@ -159,6 +159,15 @@ contract BitRegistry {
         emit RoleChanged(repoId, msg.sender, Role.Owner);
     }
 
+    function getRepoCount() external view returns (uint256) {
+        return nextRepoId - 1;
+    }
+
+    function getRepo(uint256 repoId) external view repoExists(repoId) returns (address owner, bytes memory metadataCID) {
+        Repo storage repo = repos[repoId];
+        return (repo.owner, repo.metadataCID);
+    }
+
     function getRole(uint256 repoId, address user) external view repoExists(repoId) returns (Role) {
         return repos[repoId].roles[user];
     }
