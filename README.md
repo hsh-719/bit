@@ -8,13 +8,13 @@ IPFS와 이더리움 블록체인 위에서 동작하는 탈중앙화 버전 관
 ---
 ## 영상
 
-1. Maintainer Creating Repository
+1. Maintainer Creating Repository  
 [![Video Label](http://img.youtube.com/vi/f56hsj97zWA/0.jpg)](https://youtu.be/f56hsj97zWA)
 
-2. Contributor Developing
+2. Contributor Developing  
 [![Video Label](http://img.youtube.com/vi/HiM1U8WBm3g/0.jpg)](https://youtu.be/HiM1U8WBm3g)
 
-3. Maintainer Approving PR
+3. Maintainer Approving PR  
 [![Video Label](http://img.youtube.com/vi/qIJjybwHhjo/0.jpg)](https://youtu.be/qIJjybwHhjo)
 
 ---
