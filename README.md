@@ -5,6 +5,19 @@ IPFS와 이더리움 블록체인 위에서 동작하는 탈중앙화 버전 관
 커밋 diff와 메타데이터는 IPFS에, 브랜치/커밋 상태는 스마트 컨트랙트(BitRegistry)에 저장됩니다.
 중앙 서버 없이 코드 히스토리를 영구적으로 보존하고 누구나 검증할 수 있습니다.
 
+---
+## 영상
+
+1. Maintainer Creating Repository
+[![Video Label](http://img.youtube.com/vi/f56hsj97zWA/0.jpg)](https://youtu.be/f56hsj97zWA)
+
+2. Contributor Developing
+[![Video Label](http://img.youtube.com/vi/HiM1U8WBm3g/0.jpg)](https://youtu.be/HiM1U8WBm3g)
+
+3. Maintainer Approving PR
+[![Video Label](http://img.youtube.com/vi/qIJjybwHhjo/0.jpg)](https://youtu.be/qIJjybwHhjo)
+
+---
 
 ---
 
