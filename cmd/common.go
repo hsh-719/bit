@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/hsh-719/bit/internal/chain"
+	"github.com/opendasom/bit/internal/chain"
 )
 
 func loadBranchRecords(chainClient *chain.Client, repoID *big.Int, branch string, total int64) ([]chain.BranchCommitRecord, error) {

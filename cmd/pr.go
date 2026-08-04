@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/hsh-719/bit/internal/chain"
-	"github.com/hsh-719/bit/internal/config"
-	"github.com/hsh-719/bit/internal/git"
+	"github.com/opendasom/bit/internal/chain"
+	"github.com/opendasom/bit/internal/config"
+	"github.com/opendasom/bit/internal/git"
 	"github.com/spf13/cobra"
 )
 

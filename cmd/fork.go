@@ -6,12 +6,12 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/hsh-719/bit/internal/chain"
-	compactcid "github.com/hsh-719/bit/internal/cid"
-	"github.com/hsh-719/bit/internal/config"
-	"github.com/hsh-719/bit/internal/git"
-	"github.com/hsh-719/bit/internal/ipfs"
-	"github.com/hsh-719/bit/internal/manifest"
+	"github.com/opendasom/bit/internal/chain"
+	compactcid "github.com/opendasom/bit/internal/cid"
+	"github.com/opendasom/bit/internal/config"
+	"github.com/opendasom/bit/internal/git"
+	"github.com/opendasom/bit/internal/ipfs"
+	"github.com/opendasom/bit/internal/manifest"
 	"github.com/spf13/cobra"
 )
 

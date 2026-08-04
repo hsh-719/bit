@@ -5,10 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/hsh-719/bit/internal/chain"
-	"github.com/hsh-719/bit/internal/config"
-	"github.com/hsh-719/bit/internal/ipfs"
-	"github.com/hsh-719/bit/internal/repo"
+	"github.com/opendasom/bit/internal/chain"
+	"github.com/opendasom/bit/internal/config"
+	"github.com/opendasom/bit/internal/ipfs"
+	"github.com/opendasom/bit/internal/repo"
 	"github.com/spf13/cobra"
 )
 
